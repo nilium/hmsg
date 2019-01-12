@@ -71,7 +71,7 @@ func NewMessenger(maxMsgSize int64, hashfn HashFunc) (*Messenger, error) {
 // hash function, it returns an error. This is to prevent acceptance of corrupt,
 // spoofed, or otherwise invalid messages (depending on the digest).
 //
-// If p's length (not capacity) is not large enough to accomodate the message
+// If p's length (not capacity) is not large enough to accommodate the message
 // payload, a large enough byte slice is allocated to hold it.
 //
 // Too-small and too-large messages will also return errors.
