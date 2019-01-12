@@ -31,22 +31,7 @@ func main() {
 	)
 	flag.Parse()
 
-	hashfn := sha1.New
-	switch *hashname {
-	case "sha1":
-	case "sha256":
-		hashfn = sha256.New
-	case "md5":
-		hashfn = md5.New
-	case "crc64":
-		isoTable := crc64.MakeTable(crc64.ISO)
-		hashfn = func() hash.Hash { return crc64.New(isoTable) }
-	case "null":
-		hashfn = hmsg.NullHash
-	default:
-		log.Fatalf("unrecognized hash function: %s", *hashname)
-	}
-
+	hashfn := namedHashFunc(*hashname)
 	if *key != "" {
 		hashfn = hmsg.HMAC(*key, hashfn)
 	}
@@ -58,27 +43,57 @@ func main() {
 
 	mr, err := hmsg.NewMessenger(maxMsgSize, hashfn)
 	if err != nil {
-		goto done
+		log.Fatalf("Cannot create messenger: %v", err)
 	}
 
 	if *decode {
 		err = ReadMessages(os.Stdin, mr)
 	} else {
-		msgs := flag.Args()
-		if len(msgs) == 0 {
-			var msg []byte
-			msg, err = ioutil.ReadAll(os.Stdin)
-			if err != nil {
-				goto done
-			}
-			msgs = []string{string(msg)}
-		}
-		err = WriteMessages(os.Stdout, mr, msgs)
+		err = writeMessages(mr)
 	}
-done:
+
 	if err != nil && err != io.EOF {
 		log.Fatalf("Error: %v\n", err)
 	}
+}
+
+func namedHashFunc(name string) hmsg.HashFunc {
+	switch *hashname {
+	case "sha1":
+		return sha1.New
+	case "sha256":
+		return sha256.New
+	case "md5":
+		return md5.New
+	case "crc64":
+		isoTable := crc64.MakeTable(crc64.ISO)
+		return func() hash.Hash { return crc64.New(isoTable) }
+	case "null":
+		return hmsg.NullHash
+	default:
+		log.Fatalf("unrecognized hash function: %s", *hashname)
+		panic("unreachable")
+	}
+}
+
+func writeMessages(mr *hmsg.Messenger) (err error) {
+	msgs := flag.Args()
+	if len(msgs) == 0 {
+		msgs, err = readerMessage(os.Stdin)
+		if err != nil {
+			return err
+		}
+	}
+	return WriteMessages(os.Stdout, mr, msgs)
+}
+
+func readerMessage(r io.Reader) ([]string, error) {
+	var msg []byte
+	msg, err = ioutil.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	return []string{string(msg)}
 }
 
 func WriteMessages(w io.Writer, mr *hmsg.Messenger, messages []string) error {
