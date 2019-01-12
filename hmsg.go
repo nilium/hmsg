@@ -184,7 +184,7 @@ func (m *Messenger) WriteMsg(w io.Writer, p []byte) error {
 	err = writeFull(w, digest, err) // digest bytes
 	err = writeFull(w, p, err)      // payload
 
-	return nil
+	return err
 }
 
 func writeFull(w io.Writer, p []byte, err error) error {
