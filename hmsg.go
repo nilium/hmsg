@@ -64,6 +64,30 @@ func NewMessenger(maxMsgSize int64, hashfn HashFunc) (*Messenger, error) {
 	}, nil
 }
 
+func (m *Messenger) readTooLarge(usize uint64) error {
+	if usize > math.MaxInt64 {
+		return fmt.Errorf("message of %d bytes exceeds max int64 (%d)",
+			usize, math.MaxInt64)
+	}
+
+	if usize < uint64(m.hashSize) {
+		return fmt.Errorf("message of %d bytes is too small to contain a checksum (%d bytes)",
+			usize, m.hashSize)
+	}
+
+	if m.maxSize == 0 {
+		return nil
+	}
+
+	prefix := bits.Len64(usize)/7 + 1
+	if usize+uint64(prefix) > m.maxSize {
+		return fmt.Errorf("message of %d bytes exceeds max size (%d bytes)",
+			usize, m.maxSize)
+	}
+
+	return nil
+}
+
 // ReadMsgTo reads length, digest, and payload from r and, if the message is
 // valid, stores the payload in the slice p and returns the payload.
 //
@@ -93,23 +117,8 @@ func (m *Messenger) ReadMsgTo(p []byte, r io.Reader) ([]byte, error) {
 		return nil, err
 	}
 
-	if usize > math.MaxInt64 {
-		return nil, fmt.Errorf("message of %d bytes exceeds max int64 (%d)",
-			usize, math.MaxInt64)
-	} else if m.maxSize == 0 {
-		// No explicit max size
-	} else {
-		lenSize := uint64(bits.Len64(usize)/7 + 1)
-		totalSize := usize + lenSize
-		if totalSize > m.maxSize {
-			return nil, fmt.Errorf("message of %d bytes exceeds max size (%d bytes)",
-				usize, m.maxSize)
-		}
-	}
-
-	if usize < uint64(m.hashSize) {
-		return nil, fmt.Errorf("message of %d bytes is too small to contain a checksum (%d bytes)",
-			usize, m.hashSize)
+	if err := m.readTooLarge(usize); err != nil {
+		return nil, err
 	}
 
 	// Read digest
@@ -122,10 +131,10 @@ func (m *Messenger) ReadMsgTo(p []byte, r io.Reader) ([]byte, error) {
 	// NOTE: On 32-bit hosts, there is a possibility of truncating the
 	// message size here if the maximum message size isn't set low enough.
 	payloadSize := int(usize) - m.hashSize
-	if c := len(p); c >= payloadSize {
-		p = p[:payloadSize]
-	} else {
+	if len(p) < payloadSize {
 		p = make([]byte, payloadSize)
+	} else {
+		p = p[:payloadSize]
 	}
 
 	// Read and hash payload
