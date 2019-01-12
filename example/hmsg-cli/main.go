@@ -47,7 +47,7 @@ func main() {
 	}
 
 	if *decode {
-		err = ReadMessages(os.Stdin, mr)
+		err = readMessages(os.Stdin, mr)
 	} else {
 		err = writeMessages(mr)
 	}
@@ -58,7 +58,7 @@ func main() {
 }
 
 func namedHashFunc(name string) hmsg.HashFunc {
-	switch *hashname {
+	switch name {
 	case "sha1":
 		return sha1.New
 	case "sha256":
@@ -71,7 +71,7 @@ func namedHashFunc(name string) hmsg.HashFunc {
 	case "null":
 		return hmsg.NullHash
 	default:
-		log.Fatalf("unrecognized hash function: %s", *hashname)
+		log.Fatalf("unrecognized hash function: %s", name)
 		panic("unreachable")
 	}
 }
@@ -84,19 +84,18 @@ func writeMessages(mr *hmsg.Messenger) (err error) {
 			return err
 		}
 	}
-	return WriteMessages(os.Stdout, mr, msgs)
+	return writeMessagesTo(os.Stdout, mr, msgs)
 }
 
 func readerMessage(r io.Reader) ([]string, error) {
-	var msg []byte
-	msg, err = ioutil.ReadAll(r)
+	msg, err := ioutil.ReadAll(r)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return []string{string(msg)}
+	return []string{string(msg)}, nil
 }
 
-func WriteMessages(w io.Writer, mr *hmsg.Messenger, messages []string) error {
+func writeMessagesTo(w io.Writer, mr *hmsg.Messenger, messages []string) error {
 	for _, msg := range messages {
 		err := mr.WriteMsg(w, []byte(msg))
 		if err != nil {
@@ -106,7 +105,7 @@ func WriteMessages(w io.Writer, mr *hmsg.Messenger, messages []string) error {
 	return nil
 }
 
-func ReadMessages(r io.Reader, mr *hmsg.Messenger) error {
+func readMessages(r io.Reader, mr *hmsg.Messenger) error {
 	next := false
 	for {
 		msg, err := mr.ReadMsg(r)
