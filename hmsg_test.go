@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"crypto/md5"
 	"crypto/sha1"
+	"hash"
+	"hash/fnv"
 	"io"
 	"io/ioutil"
 	"strconv"
@@ -209,4 +211,110 @@ func testMessage(n int64) []byte {
 		p[i] = byte(i)
 	}
 	return p
+}
+
+// Benchmarks
+
+// benchmarkMsg here is intended to be a reasonably long but inside what I am
+// assuming is a typical MTU of like 1500.
+const benchmarkMsg = `{"data":{"name":"erlang","version":"21.2","revision":1,"architecture":"x86_64","build_date":"2018-12-16T16:39:00Z","build_options":"~x11 ","filename_sha256":"c7da634d2b2a9489abcc7a5af5b07dcaa6b18f2f751133d0f9bac4492bf8178b","filename_size":35292264,"homepage":"http://www.erlang.org/","installed_size":99894053,"license":"Apache-2.0","maintainer":"Leah Neukirchen \u003cleah@vuxu.org\u003e","short_desc":"Concurrent functional programming language developed by Ericsson","source_revisions":"erlang:2dda58cbaa","run_depends":["glibc\u003e=2.28_1","ncurses-libs\u003e=5.8_1","zlib\u003e=1.2.3_1","libodbc\u003e=2.3.1_1","libcrypto44\u003e=2.8.2_1"],"shlib_requires":["libm.so.6","libc.so.6","libutil.so.1","librt.so.1","libdl.so.2","libncursesw.so.6","libz.so.1","libpthread.so.0","libodbc.so.2","libcrypto.so.44"]}}`
+
+func benchmarkHash() hash.Hash {
+	return fnv.New64a()
+}
+
+// Note: All benchmarks currently use FNV1-a 64-bit hashes. This has an impact
+// on their timing and is intended to get a better feel for normal use.
+
+// BenchmarkSimpleWrite tests writing a message to ioutil.Discard.
+func BenchmarkSimpleWrite(b *testing.B) {
+	m, err := hmsg.NewMessenger(1000, benchmarkHash)
+	if err != nil {
+		b.Fatalf("Unable to create messenger: %v", err)
+	}
+
+	msg := []byte(benchmarkMsg)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := m.WriteMsg(ioutil.Discard, msg); err != nil {
+			b.Fatalf("WriteMsg(..) = %#v; expected no error", err)
+		}
+	}
+}
+
+// BenchmarkSimpleRead is a test of using ReadMsg and allowing Messenger to
+// allocate an appropriately sized buffer each time.
+func BenchmarkSimpleRead(b *testing.B) {
+	m, err := hmsg.NewMessenger(1000, benchmarkHash)
+	if err != nil {
+		b.Fatalf("Unable to create messenger: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := m.WriteMsg(&buf, []byte(benchmarkMsg)); err != nil {
+		b.Fatalf("WriteMsg(..) error = %#v; expected no error", err)
+	}
+
+	msg := buf.Bytes()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := m.ReadMsg(bytes.NewReader(msg)); err != nil {
+			b.Fatalf("ReadMsg(..) = %#v; expected no error", err)
+		}
+	}
+}
+
+// BenchmarkBufferedRead tests reading into a preallocated buffer to see whether
+// this impacts performance or if the majority of time spent is elsewhere.
+func BenchmarkBufferedRead(b *testing.B) {
+	m, err := hmsg.NewMessenger(1000, benchmarkHash)
+	if err != nil {
+		b.Fatalf("Unable to create messenger: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := m.WriteMsg(&buf, []byte(benchmarkMsg)); err != nil {
+		b.Fatalf("WriteMsg(..) error = %#v; expected no error", err)
+	}
+
+	msg := buf.Bytes()
+	back := make([]byte, m.MaxPayloadSize())
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		p, err := m.ReadMsgTo(back, bytes.NewReader(msg))
+		if err != nil {
+			b.Fatalf("ReadMsgTo(..) = %#v; expected no error", err)
+		}
+		back = p
+	}
+}
+
+// BenchmarkBufferedUnlimitedRead tests reading ito a preallocated buffer with
+// no maximum message size. This prevents allocation of a LimitedReader (which
+// could be removed later, but is in there as a basic safety measure).
+func BenchmarkBufferedUnlimitedRead(b *testing.B) {
+	m, err := hmsg.NewMessenger(0, benchmarkHash)
+	if err != nil {
+		b.Fatalf("Unable to create messenger: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := m.WriteMsg(&buf, []byte(benchmarkMsg)); err != nil {
+		b.Fatalf("WriteMsg(..) error = %#v; expected no error", err)
+	}
+
+	msg := buf.Bytes()
+	back := make([]byte, 1000)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		p, err := m.ReadMsgTo(back, bytes.NewReader(msg))
+		if err != nil {
+			b.Fatalf("ReadMsgTo(..) = %#v; expected no error", err)
+		}
+		back = p
+	}
 }
