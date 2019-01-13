@@ -192,7 +192,7 @@ func (m *Messenger) ReadMsgTo(p []byte, r io.Reader) ([]byte, error) {
 	}
 
 	// Read and hash payload
-	_, err = io.ReadFull(io.TeeReader(r, h), p)
+	_, err = io.ReadFull(hashReader, p)
 	if err != nil {
 		return nil, unexpectedEOF(err)
 	}
