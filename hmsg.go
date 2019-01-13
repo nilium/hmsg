@@ -45,6 +45,9 @@ func IsVerifyError(err error) bool {
 }
 
 // Messenger reads and writes messages with length and checksum prefixes.
+//
+// A Messenger is safe to use across multiple goroutines and does not keep any
+// state.
 type Messenger struct {
 	maxSize  uint64
 	hashSize int
