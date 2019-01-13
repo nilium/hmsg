@@ -24,6 +24,26 @@ func MaxMessageSize(payloadSize int64, hashfn HashFunc) int64 {
 	return payloadSize + int64(lengthSize)
 }
 
+// VerifyError is returned when a receive's message's digest does not match its
+// contents.
+type VerifyError struct {
+	Got  []byte
+	Want []byte
+}
+
+// Error implements error.
+func (c *VerifyError) Error() string {
+	return fmt.Sprintf(
+		"message digests don't match: sent(%x) <> received(%x)",
+		c.Got, c.Want)
+}
+
+// IsVerifyError returns whether err is a VerifyError.
+func IsVerifyError(err error) bool {
+	_, ok := err.(*VerifyError)
+	return ok
+}
+
 // Messenger reads and writes messages with length and digest prefixes.
 type Messenger struct {
 	maxSize  uint64
@@ -178,8 +198,10 @@ func (m *Messenger) ReadMsgTo(p []byte, r io.Reader) ([]byte, error) {
 
 	// Compare received and computed digests
 	if sum := h.Sum(nil); !hmac.Equal(sum, digest) {
-		return nil, fmt.Errorf("message digests don't match: sent(%x) <> received(%x)",
-			sum, digest)
+		return nil, &VerifyError{
+			Want: digest,
+			Got:  sum,
+		}
 	}
 
 	return p, nil
