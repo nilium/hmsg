@@ -149,8 +149,8 @@ func (m *Messenger) readTooLarge(usize uint64) error {
 // acceptance of corrupt, spoofed, or otherwise invalid messages (depending on
 // the checksum).
 //
-// If p's length (not capacity) is not large enough to accommodate the message
-// payload, a large enough byte slice is allocated to hold it.
+// If p is not large enough to accommodate the message payload, a large enough
+// byte slice is allocated to hold it.
 //
 // Too-small and too-large messages will also return errors.
 // All other errors arise from reading from r.
