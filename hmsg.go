@@ -24,8 +24,8 @@ func MaxMessageSize(payloadSize int64, hashfn HashFunc) int64 {
 	return payloadSize + int64(lengthSize)
 }
 
-// VerifyError is returned when a receive's message's digest does not match its
-// contents.
+// VerifyError is returned when a receive's message's checksum does not match
+// its contents.
 type VerifyError struct {
 	Got  []byte
 	Want []byte
@@ -34,7 +34,7 @@ type VerifyError struct {
 // Error implements error.
 func (c *VerifyError) Error() string {
 	return fmt.Sprintf(
-		"message digests don't match: sent(%x) <> received(%x)",
+		"message checksums don't match: sent(%x) <> received(%x)",
 		c.Got, c.Want)
 }
 
@@ -44,7 +44,7 @@ func IsVerifyError(err error) bool {
 	return ok
 }
 
-// Messenger reads and writes messages with length and digest prefixes.
+// Messenger reads and writes messages with length and checksum prefixes.
 type Messenger struct {
 	maxSize  uint64
 	hashSize int
@@ -52,7 +52,7 @@ type Messenger struct {
 }
 
 // NewMessenger allocates a new Messenger for reading and writing length- and
-// digest-prefixed messages.
+// checksum-prefixed messages.
 //
 // maxMsgSize specifies the maximum size of a message in bytes, and must be
 // greater than the minimum size needed to contain a message length prefix for
@@ -141,12 +141,13 @@ func (m *Messenger) readTooLarge(usize uint64) error {
 	return nil
 }
 
-// ReadMsgTo reads length, digest, and payload from r and, if the message is
+// ReadMsgTo reads length, checksum, and payload from r and, if the message is
 // valid, stores the payload in the slice p and returns the payload.
 //
-// If the digest of the payload does not match when filtered through Messenger's
-// hash function, it returns an error. This is to prevent acceptance of corrupt,
-// spoofed, or otherwise invalid messages (depending on the digest).
+// If the checksum of the payload does not match when filtered through
+// Messenger's hash function, it returns a *VerifyError. This is to prevent
+// acceptance of corrupt, spoofed, or otherwise invalid messages (depending on
+// the checksum).
 //
 // If p's length (not capacity) is not large enough to accommodate the message
 // payload, a large enough byte slice is allocated to hold it.
@@ -174,9 +175,9 @@ func (m *Messenger) ReadMsgTo(p []byte, r io.Reader) ([]byte, error) {
 		return nil, err
 	}
 
-	// Read digest
-	digest := make([]byte, m.hashSize)
-	if _, err := io.ReadFull(r, digest); err != nil {
+	// Read checksum
+	checksum := make([]byte, m.hashSize)
+	if _, err := io.ReadFull(r, checksum); err != nil {
 		return nil, unexpectedEOF(err)
 	}
 
@@ -196,25 +197,25 @@ func (m *Messenger) ReadMsgTo(p []byte, r io.Reader) ([]byte, error) {
 		return nil, unexpectedEOF(err)
 	}
 
-	// Compare received and computed digests
-	if sum := h.Sum(nil); !hmac.Equal(sum, digest) {
+	// Compare received and computed checksums
+	if recvSum := h.Sum(nil); !hmac.Equal(recvSum, checksum) {
 		return nil, &VerifyError{
-			Want: digest,
-			Got:  sum,
+			Want: checksum,
+			Got:  recvSum,
 		}
 	}
 
 	return p, nil
 }
 
-// ReadMsg reads length, digest, and payload from r.
+// ReadMsg reads length, checksum, and payload from r.
 // This function is identical to ReadMsgTo, except that it will always allocate
 // a new byte slice for the message. See ReadMsgTo for more detail.
 func (m *Messenger) ReadMsg(r io.Reader) ([]byte, error) {
 	return m.ReadMsgTo(nil, r)
 }
 
-// WriteMsg writes the payload, p, prefixed by its length and digest, to the
+// WriteMsg writes the payload, p, prefixed by its length and checksum, to the
 // writer w.
 //
 // If the total length of the message (length prefix, checksum, and payload p)
@@ -237,16 +238,16 @@ func (m *Messenger) WriteMsg(w io.Writer, p []byte) error {
 			totalSize, intlen, m.hashSize, len(p), m.maxSize)
 	}
 
-	// Compute digest
+	// Compute checksum
 	h := m.hashfn()
 	h.Write(intp) // length bytes
 	h.Write(p)    // payload
-	digest := h.Sum(make([]byte, 0, m.hashSize))
+	checksum := h.Sum(make([]byte, 0, m.hashSize))
 
 	// Write message
-	err := writeFull(w, intp, nil)  // length bytes
-	err = writeFull(w, digest, err) // digest bytes
-	err = writeFull(w, p, err)      // payload
+	err := writeFull(w, intp, nil)    // length bytes
+	err = writeFull(w, checksum, err) // checksum bytes
+	err = writeFull(w, p, err)        // payload
 
 	return err
 }
