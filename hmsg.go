@@ -12,15 +12,15 @@ import (
 	"math/bits"
 )
 
-// MaxMessageSize returns the maximum message size needed to contain a payload of payloadSize,
-// checksum for hashfn, and the length prefix of the message.
+// MaxMessageSize returns the maximum message size needed to contain a payload
+// of payloadSize, checksum for hashfn, and the length prefix of the message.
 func MaxMessageSize(payloadSize int64, hashfn HashFunc) int64 {
 	const maxMsg64 = math.MaxInt64 - binary.MaxVarintLen64
 	payloadSize += int64(hashfn().Size())
 	if payloadSize <= 0 || payloadSize > maxMsg64 {
 		return math.MaxInt64
 	}
-	lengthSize := bits.Len64(uint64(payloadSize))/7 + 1 // Bytes needed for the maximum length prefix
+	lengthSize := uvarintLen(uint64(payloadSize)) // Bytes needed for the maximum length prefix
 	return payloadSize + int64(lengthSize)
 }
 
@@ -49,8 +49,8 @@ func NewMessenger(maxMsgSize int64, hashfn HashFunc) (*Messenger, error) {
 		return nil, fmt.Errorf("hash size must be >= 0; got %d", hashSize)
 	}
 
-	lengthSize := bits.Len64(uint64(maxMsgSize))/7 + 1 // Bytes needed for the maximum length prefix
-	maxHeaderSize := int64(lengthSize + hashSize)      // Maximum header size
+	lengthSize := int(uvarintLen(uint64(maxMsgSize))) // Bytes needed for the maximum length prefix
+	maxHeaderSize := int64(lengthSize + hashSize)     // Maximum header size
 
 	if maxMsgSize <= 0 {
 		maxMsgSize = 0
@@ -62,6 +62,39 @@ func NewMessenger(maxMsgSize int64, hashfn HashFunc) (*Messenger, error) {
 		hashSize: hashSize,
 		hashfn:   hashfn,
 	}, nil
+}
+
+// MaxMessageSize returns the maximum message size.
+// Message size includes the length prefix and checksum size.
+//
+// If the Messenger was not given an explicit message size, its maximum is
+// math.MaxInt64.
+func (m *Messenger) MaxMessageSize() int64 {
+	if m.maxSize == 0 {
+		return math.MaxInt64
+	}
+	return int64(m.maxSize)
+}
+
+func uvarintLen(z uint64) int64 {
+	b := bits.Len64(z)
+	n := b / 7
+	if b%7 != 0 {
+		n++
+	}
+	return int64(n)
+}
+
+// MaxPayloadSize returns the maximum payload size.
+// This is the size of the largest payload that can be sent.
+// The result of MaxPayloadSize is always less than or equal to MaxMessageSize.
+func (m *Messenger) MaxPayloadSize() int64 {
+	return m.MaxMessageSize() - uvarintLen(m.maxSize) - int64(m.hashSize)
+}
+
+// HashFunc returns the hash function the Messenger was created with.
+func (m *Messenger) HashFunc() HashFunc {
+	return m.hashfn
 }
 
 func (m *Messenger) readTooLarge(usize uint64) error {
@@ -79,7 +112,7 @@ func (m *Messenger) readTooLarge(usize uint64) error {
 		return nil
 	}
 
-	prefix := bits.Len64(usize)/7 + 1
+	prefix := uvarintLen(usize)
 	if usize+uint64(prefix) > m.maxSize {
 		return fmt.Errorf("message of %d bytes exceeds max size (%d bytes)",
 			usize, m.maxSize)
