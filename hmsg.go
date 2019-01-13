@@ -59,6 +59,10 @@ type Messenger struct {
 // maxMsgSize and its checksum. If maxMsgSize would be invalid, or the hash
 // function does not return a valid message size (or is nil), NewMessenger
 // returns an error.
+//
+// If maxMsgSize is zero (or less), the upper limit for message size is
+// math.MaxInt64. The upper limit may change depending on the target system, so
+// it's recommended that you specify your own size limit.
 func NewMessenger(maxMsgSize int64, hashfn HashFunc) (*Messenger, error) {
 	if hashfn == nil {
 		return nil, errors.New("hash function is nil")
@@ -87,8 +91,9 @@ func NewMessenger(maxMsgSize int64, hashfn HashFunc) (*Messenger, error) {
 // MaxMessageSize returns the maximum message size.
 // Message size includes the length prefix and checksum size.
 //
-// If the Messenger was not given an explicit message size, its maximum is
-// math.MaxInt64.
+// If the Messenger was not given an explicit message size, MaxMessageSize
+// returns a reasonable maximum for the target system (currently math.MaxInt64,
+// but this may change).
 func (m *Messenger) MaxMessageSize() int64 {
 	if m.maxSize == 0 {
 		return math.MaxInt64
