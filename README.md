@@ -3,7 +3,7 @@ hmsg
 <!-- BADGES! -->
 [![GoDoc](https://godoc.org/go.spiff.io/hmsg?status.svg)](https://godoc.org/go.spiff.io/hmsg)
 [![Go Report Card](https://goreportcard.com/badge/go.spiff.io/hmsg)](https://goreportcard.com/report/go.spiff.io/hmsg)
-[![Build Status](https://travis-ci.org/nilium/hmsg.svg?branch=master)](https://travis-ci.org/nilium/hmsg)
+[![CircleCI](https://circleci.com/gh/nilium/hmsg/tree/master.svg?style=svg)](https://circleci.com/gh/nilium/hmsg/tree/master)
 [![codecov](https://codecov.io/gh/nilium/hmsg/branch/master/graph/badge.svg)](https://codecov.io/gh/nilium/hmsg)
 
 
